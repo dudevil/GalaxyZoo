@@ -18,7 +18,7 @@ np.random.seed(seed)
 
 train_images_path = '/home/dudevil/prog/dmlabs/GalaxyZoo/data/raw/images_training_rev1'
 n_images = 200
-patch_size = 32
+patch_size = 16
 
 galaxy_files = [os.path.join(train_images_path, f)
                 for f in os.listdir(train_images_path)
@@ -68,7 +68,7 @@ def plotImageGrid(images, image_size=(), nrow=4, ncol=4):
         x, y, c = images.shape[1:]
     plt.figure(figsize=(x*ncol, y*nrow))
     for i, image in enumerate(images):
-        plt.subplot(x, y, i+1)
+        plt.subplot(nrow, ncol, i+1)
         if image_size:
             plt.imshow(image.reshape(image_size))
         else:
@@ -76,15 +76,14 @@ def plotImageGrid(images, image_size=(), nrow=4, ncol=4):
         plt.axis('off')
 
 X = np.zeros((16*n_images, patch_size*patch_size*3))
-var = np.zeros((16*n_images, 3))
 
 for i, file in enumerate(galaxy_files):
     image = crop_and_resize(misc.imread(file))
-    patches = extract_patches_2d(image, patch_size=(32, 32), max_patches=16)
+    patches = extract_patches_2d(image, patch_size=(patch_size, patch_size), max_patches=16)
     for j, patch in enumerate(patches):
         mean = np.mean(patch, axis=(0, 1), keepdims=True)
-        var = np.var(patch, axis=(0,1), keepdims=True)
-        patches[j] = (patch - mn)/(var + 5)
+        #var = np.var(patch, axis=(0,1), keepdims=True)
+        patches[j] = patch - mean
     X[i*16:i*16+16, ...] = patches.reshape((16, -1))
 
 X /= 255.0
@@ -92,10 +91,12 @@ X /= 255.0
 sample_patches_ind = np.random.choice(X.shape[0], 36)
 plotImageGrid(X[sample_patches_ind, ...],
               image_size=(patch_size, patch_size, 3), nrow=6, ncol=6)
-plt.savefig('patches32.png')
+#plt.savefig('patches16.png')
+plt.show()
 
 #perform whitening
-pca = RandomizedPCA(n_components=200, whiten=True, random_state=seed)
+# 590 components = 99% explained varience
+pca = RandomizedPCA(n_components=590, whiten=True, random_state=seed)
 w_X = pca.fit_transform(X)
 
 print("==== PCA fitted =====")
@@ -105,10 +106,11 @@ print(pca.explained_variance_ratio_)
 #plot whitened patches after inverse transform
 orig_X = pca.inverse_transform(w_X[sample_patches_ind, ...])
 plotImageGrid(orig_X, image_size=(patch_size, patch_size, 3), nrow=6, ncol=6)
-plt.savefig('patches_whitened32.png')
+#plt.savefig('patches_whitened16.png')
+plt.show()
 
 ###KMEANS
-k_means = cluster.KMeans(n_clusters=100, n_jobs=3)
+k_means = cluster.KMeans(n_clusters=50, n_jobs=3)
 k_means.fit(X)
 print("==== K-Means fitted ====")
 
@@ -116,5 +118,5 @@ print("==== K-Means fitted ====")
 # get centroids and transform them to original space
 #tmp = pca.inverse_transform(k_means.cluster_centers_.copy())
 tmp = k_means.cluster_centers_.copy()
-plotImageGrid(tmp, image_size=(16, 16, 3), nrow=10, ncol=10 )
+plotImageGrid(tmp, image_size=(16, 16, 3), nrow=5, ncol=10 )
 plt.savefig('centroids_nw.png')
