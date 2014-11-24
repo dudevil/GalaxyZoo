@@ -1,0 +1,108 @@
+{
+    "children": [
+        {
+            "children": [
+                {
+                    "name": "Class7.1", 
+                    "size": 170018
+                }, 
+                {
+                    "name": "Class7.2", 
+                    "size": 207762
+                }, 
+                {
+                    "name": "Class7.3", 
+                    "size": 54739
+                }
+            ], 
+            "name": "Class1.1", 
+            "size": 432519
+        }, 
+        {
+            "children": [
+                {
+                    "children": [
+                        {
+                            "name": "Class9.1", 
+                            "size": 63013
+                        }, 
+                        {
+                            "name": "Class9.2", 
+                            "size": 10614
+                        }, 
+                        {
+                            "name": "Class9.3", 
+                            "size": 32780
+                        }
+                    ], 
+                    "name": "Class2.1", 
+                    "size": 106406
+                }, 
+                {
+                    "children": [
+                        {
+                            "children": [
+                                {
+                                    "children": [
+                                        {
+                                            "name": "Class10.1", 
+                                            "size": 91800
+                                        }, 
+                                        {
+                                            "name": "Class10.2", 
+                                            "size": 83968
+                                        }, 
+                                        {
+                                            "name": "Class10.3", 
+                                            "size": 39858
+                                        }
+                                    ], 
+                                    "name": "Class4.1", 
+                                    "size": 215626
+                                }, 
+                                {
+                                    "children": [
+                                        {
+                                            "name": "Class5.1", 
+                                            "size": 40842
+                                        }, 
+                                        {
+                                            "name": "Class5.3", 
+                                            "size": 180465
+                                        }, 
+                                        {
+                                            "name": "Class5.3", 
+                                            "size": 177901
+                                        }, 
+                                        {
+                                            "name": "Class5.4", 
+                                            "size": 36638
+                                        }
+                                    ], 
+                                    "name": "Class4.2", 
+                                    "size": 220221
+                                }
+                            ], 
+                            "name": "Class3.1", 
+                            "size": 102524
+                        }, 
+                        {
+                            "name": "Class3.2", 
+                            "size": 333322
+                        }
+                    ], 
+                    "name": "Class2.2", 
+                    "size": 435846
+                }
+            ], 
+            "name": "Class1.2", 
+            "size": 542252
+        }, 
+        {
+            "name": "Class1.3", 
+            "size": 25212
+        }
+    ], 
+    "name": "flare", 
+    "size": 1
+}

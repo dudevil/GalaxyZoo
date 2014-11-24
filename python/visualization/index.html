@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Galaxyburst</title>
+    <script src="http://d3js.org/d3.v3.min.js"></script>
+    <link rel="stylesheet" type="text/css"
+      href="https://fonts.googleapis.com/css?family=Open+Sans:400,600">
+    <style>
+        body {
+        font-family: 'Open Sans', sans-serif;
+        font-size: 12px;
+        font-weight: 400;
+        background-color: #fff;
+        width: 960px;
+        height: 700px;
+        margin-top: 10px;
+        }
+
+        #main {
+        float: left;
+        width: 750px;
+        }
+
+        #sidebar {
+        float: right;
+        width: 180px;
+        height: 180px;
+        }
+
+        #sequence {
+        width: 600px;
+        height: 70px;
+        }
+
+        #legend {
+        padding: 10px 0 0 3px;
+        }
+
+        #sequence text, #legend text {
+        font-weight: 600;
+        fill: #fff;
+        }
+
+        #chart {
+        position: relative;
+        }
+
+        #chart path {
+        stroke: #fff;
+        }
+
+        #explanation {
+        position: absolute;
+        top: 260px;
+        left: 305px;
+        width: 140px;
+        text-align: center;
+        color: #666;
+        z-index: -1;
+        }
+
+        #percentage {
+        font-size: 3.5em;
+        }
+
+    </style>
+</head>
+<body>
+<div id="main">
+    <div id="sequence"></div>
+    <div id="chart">
+        <div id="center"></div>
+    </div>
+</div>
+<div id="sidebar">
+    <img src="" id="galaxy_image"/>
+</div>
+
+<script>
+
+var width = 750,
+    height = 600,
+    radius = Math.min(width, height) / 2,
+    color = d3.scale.category20c();
+
+var b = {
+  w: 75, h: 30, s: 3, t: 10
+};
+
+var colors = {
+  "Class1.1": "#aec7e8",
+  "Class1.2": "#1f77b4",
+  "Class1.3": "#7f7f7f",
+  "Class2.1": "#ff7f0e",
+  "Class2.2": "#ffbb78",
+  "Class3.1": "#2ca02c",
+  "Class3.2": "#98df8a",
+  "Class4.1": "#d62728",
+  "Class4.2": "#ff9896",
+  "Class5.1": "#9467bd",
+  "Class5.2": "#c5b0d5",
+  "Class5.3": "#e377c2",
+  "Class5.4": "#f7b6d2",
+  "Class7.1": "#bcbd22",
+  "Class7.2": "#e7ba52",
+  "Class7.3": "#dbdb8d",
+  "Class9.1": "#8c6d31",
+  "Class9.2": "#bd9e39",
+  "Class9.3": "#637939",
+  "Class10.1": "#a55194",
+  "Class10.2": "#ce6dbd",
+  "Class10.3": "#de9ed6"
+};
+
+var vis = d3.select("#chart").append("svg:svg")
+    .attr("width", width)
+    .attr("height", height)
+    .append("svg:g")
+    .attr("id", "container")
+    .attr("transform", "translate(" + width / 2 + "," + height * .52 + ")");
+
+var partition = d3.layout.partition()
+    .size([2 * Math.PI, radius * radius])
+    .value(function(d) { return d.size; });
+
+var arc = d3.svg.arc()
+    .startAngle(function(d) {
+    console.log('Start Angle: ' + d);
+    return d.x;
+    })
+    .endAngle(function(d) { return d.x + d.dx; })
+    .innerRadius(function(d) { return Math.sqrt(d.y); })
+    .outerRadius(function(d) { return Math.sqrt(d.y + d.dy); });
+
+d3.json("galaxyData.json", function(error, root) {
+    if (error) return console.warn(error);
+
+    initializeClasslabel();
+
+    vis.append("svg:circle")
+      .attr("r", radius)
+      .style("opacity", 0);
+
+    var path = vis.data([root]).selectAll("path")
+      .data(partition.nodes(root))
+      .enter().append("svg:path")
+      .attr("display", function(d) { return d.depth ? null : "none"; }) // hide inner ring
+      .attr("d", arc)
+      .style("stroke", "#fff")
+      .style("fill", function(d) { return colors[d.name];})
+      .style("fill-rule", "evenodd")
+      .style("opacity", 1)
+      .on("mouseover", mouseover);
+
+    d3.select("#container").on("mouseleave", mouseleave);
+});
+
+function mouseover(d) {
+  // Fade all the segments.
+  d3.selectAll("path")
+      .style("opacity", 0.3);
+
+  // Then highlight only those that are an ancestor of the current segment.
+  vis.selectAll("path")
+      .filter(function(node) {
+                return (getAncestors(d).indexOf(node) >= 0);
+              })
+      .style("opacity", 1);
+
+  //
+  var percentageString = (d.size/10000).toPrecision(4) + "%"
+
+  document.getElementById("galaxy_image").src = d.name+'.jpg';
+  console.log('Name: ' + d.name);
+
+  // draw class label polygon and text
+  updateClasslabel(d);
+
+  d3.select("#trail").select("#endlabel")
+     .text(percentageString);
+
+  // Make the classes trail visible, if it's hidden.
+  d3.select("#trail")
+      .style("visibility", "");
+}
+
+// Restore everything to full opacity when moving off the visualization.
+function mouseleave(d) {
+
+  // Hide the classlabel trail
+  d3.select("#trail")
+      .style("visibility", "hidden");
+
+  // Deactivate all segments during transition.
+  d3.selectAll("path").on("mouseover", null);
+
+  // Transition each segment to full opacity and then reactivate it.
+  d3.selectAll("path")
+      .transition()
+      .duration(1000)
+      .style("opacity", 1)
+      .each("end", function() {
+              d3.select(this).on("mouseover", mouseover);
+            });
+
+  d3.select("#explanation")
+      .style("visibility", "hidden");
+}
+
+// Interpolate the arcs in data space.
+function arcTween(a) {
+  var i = d3.interpolate({x: a.x0, dx: a.dx0}, a);
+  return function(t) {
+    var b = i(t);
+    a.x0 = b.x;
+    a.dx0 = b.dx;
+    return arc(b);
+  };
+}
+
+function getAncestors(node) {
+  var path = [];
+  var current = node;
+  while (current.parent) {
+    path.unshift(current);
+    current = current.parent;
+  }
+  return path;
+}
+
+function initializeClasslabel() {
+  // Add the svg area.
+  var trail = d3.select("#sequence").append("svg:svg")
+      .attr("width", width)
+      .attr("height", 50)
+      .attr("id", "trail");
+  // Add the label at the end, for the percentage.
+  trail.append("svg:text")
+    .attr("x", 130)
+    .attr("y", b.h / 2)
+    .attr("dy", "0.35em")
+    .attr("text-anchor", "middle")
+    .attr("id", "endlabel")
+    .style("fill", "#000");
+}
+
+function updateClasslabel(node){
+  // Prepage polygon points
+  polygonPoints = []
+  polygonPoints.push("0,0")
+  polygonPoints.push(b.w + ",0")
+  polygonPoints.push(b.w + b.t + "," + (b.h / 2))
+  polygonPoints.push(b.w + "," + b.h)
+  polygonPoints.push("0," + b.h);
+  polygonPoints.push(b.t + "," + (b.h / 2))
+  polygonPoints = polygonPoints.join(" ")
+
+  // append polygon
+  var entering = d3.select("#trail").append("svg:g");
+  entering.append("svg:polygon")
+      .attr("points", polygonPoints)
+      .style("fill", colors[node.name]);
+  // class name label
+  entering.append("svg:text")
+      .attr("x", (b.w + b.t) / 2)
+      .attr("y", b.h / 2)
+      .attr("dy", "0.35em")
+      .attr("text-anchor", "middle")
+      .text(node.name);
+}
+
+d3.select(self.frameElement).style("height", height + "px");
+
+</script>
+</body>
+</html>
