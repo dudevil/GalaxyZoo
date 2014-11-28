@@ -14,9 +14,7 @@ from sklearn.decomposition import RandomizedPCA
 from sklearn.feature_extraction.image import extract_patches_2d
 import sklearn.cluster as cluster
 from sklearn.externals import joblib
-
 from memory_profiler import profile
-
 __author__ = 'dudevil'
 
 # The current working dir should be the project top-level directory
@@ -172,7 +170,7 @@ def extractFeatures(patch, D, soft=True):
         features[z.argmin()] = 1
     return features
 
-@profile
+
 def mapFeatures(image, D, patch_size=(16, 16), stride=1):
     n_features = len(D)
     p_x, p_y = patch_size
@@ -182,13 +180,16 @@ def mapFeatures(image, D, patch_size=(16, 16), stride=1):
         ((y - p_y) / stride + 1, (x - p_x) / stride + 1, n_features),
         dtype=np.float)
     # extract features from each patch
-    for i in xrange(0, y - p_y + 1, stride):
-        for j in xrange(0, x - p_x + 1, stride):
-            features[i, j, :] = extractFeatures(image[i: i + p_y, j: j + p_x], D)
+    for i in xrange(features.shape[0]):
+        for j in xrange(features.shape[1]):
+            y_coor = i * stride
+            x_coor = j * stride
+            features[i, j, :] = extractFeatures(image[y_coor: y_coor + p_y,
+                                                x_coor: x_coor + p_x], D)
     return features
 
-@profile
-def pool(features, pool_size=(4, 4), type='max'):
+
+def pool(features, pool_size=(6, 6), type='max'):
     feat_x, feat_y, feat_z = features.shape
     pool_x, pool_y = pool_size
     pooled_y = feat_y / pool_y
@@ -212,13 +213,13 @@ def pool(features, pool_size=(4, 4), type='max'):
 
 if __name__ == '__main__':
     start_time = time.time()
-    images = readImages(100)
+    images = readImages()
     _logWithTimestamp('Images read')
-    D = buildFeatureDictionary(images, n_centroids=10)
+    D = buildFeatureDictionary(images, n_centroids=3000, save_pics=False)
     _logWithTimestamp('Feature Dictionary ready')
-    features = np.zeros((len(images), len(D)*12*12))
+    features = np.zeros((len(images), len(D) * 4 * 4))
     for i, image in enumerate(images):
-        features[i, ...] = pool(mapFeatures(image, D)).reshape((1, -1))
+        features[i, ...] = pool(mapFeatures(image, D, stride=2)).reshape((1, -1))
     _logWithTimestamp('Features mapped to images')
     np.savetxt('/data/tidy/pooled_features_1024_5k.csv', features, delimiter=',')
     _logWithTimestamp('Features saved, exiting')
