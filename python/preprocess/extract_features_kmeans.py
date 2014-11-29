@@ -215,11 +215,14 @@ if __name__ == '__main__':
     start_time = time.time()
     images = readImages()
     _logWithTimestamp('Images read')
-    D = buildFeatureDictionary(images, n_centroids=3000, save_pics=False)
+    D = buildFeatureDictionary(images, n_centroids=1000, save_pics=False)
     _logWithTimestamp('Feature Dictionary ready')
+    percent = len(images) / 10
     features = np.zeros((len(images), len(D) * 4 * 4))
     for i, image in enumerate(images):
+        if (i % percent) == 0 and i != 0:
+            _logWithTimestamp('Processed images: %d %%' % (float(i)*100 / len(images)))
         features[i, ...] = pool(mapFeatures(image, D, stride=2)).reshape((1, -1))
     _logWithTimestamp('Features mapped to images')
-    np.savetxt('/data/tidy/pooled_features_1024_5k.csv', features, delimiter=',')
+    np.savetxt('data/tidy/features_1000c_all.csv', features, delimiter=',')
     _logWithTimestamp('Features saved, exiting')
