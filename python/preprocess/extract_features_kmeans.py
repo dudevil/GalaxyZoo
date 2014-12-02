@@ -14,7 +14,7 @@ from sklearn.decomposition import RandomizedPCA
 from sklearn.feature_extraction.image import extract_patches_2d
 import sklearn.cluster as cluster
 from sklearn.externals import joblib
-
+from multiprocessing import Pool, cpu_count
 from memory_profiler import profile
 
 __author__ = 'dudevil'
@@ -172,7 +172,7 @@ def extractFeatures(patch, D, soft=True):
         features[z.argmin()] = 1
     return features
 
-@profile
+
 def mapFeatures(image, D, patch_size=(16, 16), stride=1):
     n_features = len(D)
     p_x, p_y = patch_size
@@ -187,8 +187,8 @@ def mapFeatures(image, D, patch_size=(16, 16), stride=1):
             features[i, j, :] = extractFeatures(image[i: i + p_y, j: j + p_x], D)
     return features
 
-@profile
-def pool(features, pool_size=(4, 4), type='max'):
+
+def pool(features, pool_size=(13, 13), type='max'):
     feat_x, feat_y, feat_z = features.shape
     pool_x, pool_y = pool_size
     pooled_y = feat_y / pool_y
@@ -210,15 +210,30 @@ def pool(features, pool_size=(4, 4), type='max'):
     return pooled_features
 
 
-if __name__ == '__main__':
-    start_time = time.time()
-    images = readImages(100)
-    _logWithTimestamp('Images read')
-    D = buildFeatureDictionary(images, n_centroids=10)
-    _logWithTimestamp('Feature Dictionary ready')
-    features = np.zeros((len(images), len(D)*12*12))
+def featuresFromImages(images, D):
+    features = np.zeros((len(images), len(D)*3*3))
     for i, image in enumerate(images):
         features[i, ...] = pool(mapFeatures(image, D)).reshape((1, -1))
+    return features
+
+if __name__ == '__main__':
+    start_time = time.time()
+    images = readImages()
+    _logWithTimestamp('Images read')
+    D = buildFeatureDictionary(images, n_centroids=3000, save_pics=False)
+    _logWithTimestamp('Feature Dictionary ready')
+    #features = np.zeros((len(images), len(D)*12*12))
+    pool = Pool()
+    res = []
+    def apply_callback(result):
+        res.append(result)
+
+    for chunk in np.array_split(images, cpu_count()):
+        _logWithTimestamp('Starting worker to chunk len %d' % len(chunk))
+        result = pool.apply_async(featuresFromImages, args=[chunk, D,], callback=apply_callback)
+    pool.close()
+    pool.join()
+    features = np.vstack(tuple(res))
     _logWithTimestamp('Features mapped to images')
-    np.savetxt('/data/tidy/pooled_features_1024_5k.csv', features, delimiter=',')
+    np.savetxt('data/tidy/pooled_features_mp_all_3000c.csv', features, delimiter=',')
     _logWithTimestamp('Features saved, exiting')
