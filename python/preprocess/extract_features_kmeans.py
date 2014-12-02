@@ -16,7 +16,6 @@ import sklearn.cluster as cluster
 from sklearn.externals import joblib
 from multiprocessing import Pool, cpu_count
 from memory_profiler import profile
-
 __author__ = 'dudevil'
 
 # The current working dir should be the project top-level directory
@@ -182,9 +181,12 @@ def mapFeatures(image, D, patch_size=(16, 16), stride=1):
         ((y - p_y) / stride + 1, (x - p_x) / stride + 1, n_features),
         dtype=np.float)
     # extract features from each patch
-    for i in xrange(0, y - p_y + 1, stride):
-        for j in xrange(0, x - p_x + 1, stride):
-            features[i, j, :] = extractFeatures(image[i: i + p_y, j: j + p_x], D)
+    for i in xrange(features.shape[0]):
+        for j in xrange(features.shape[1]):
+            y_coor = i * stride
+            x_coor = j * stride
+            features[i, j, :] = extractFeatures(image[y_coor: y_coor + p_y,
+                                                x_coor: x_coor + p_x], D)
     return features
 
 
