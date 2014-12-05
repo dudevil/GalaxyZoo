@@ -29,7 +29,7 @@ def _logWithTimestamp(msg):
     print('[%d] %s' % (int(time.time()) - start_time, msg))
 
 
-def crop_and_resize(image, crop_offset=108, resolution=64):
+def crop_and_resize(image, crop_offset=137, resolution=25):
     img = image[crop_offset:-crop_offset, crop_offset:-crop_offset]
     if not isinstance(resolution, tuple):
         resolution = (resolution, resolution)
@@ -63,7 +63,7 @@ def plotImageGrid(images, image_size=(), nrow=None, ncol=None):
 
 
 def readImages(n_images=None, images_path='data/raw/images_training_rev1',
-               grey=True, crop_offset=108, resize=(64, 64)):
+               grey=True, crop_offset=137, resize=(25, 25)):
     galaxy_files = [os.path.join(images_path, f)
                     for f in os.listdir(images_path)
                     if f.endswith('.jpg')]
@@ -79,7 +79,8 @@ def readImages(n_images=None, images_path='data/raw/images_training_rev1',
     for i, img_file in enumerate(galaxy_files):
         images[i, ...] = crop_and_resize(misc.imread(img_file, flatten=grey),
                                          crop_offset=crop_offset, resolution=resize)
-    return images
+    galaxies = [os.path.splitext(os.path.basename(g_file))[0] for g_file in galaxy_files]
+    return (images, galaxies)
 
 
 def _fileNameSuffix(base, n_patches, patch_size, n_samples='', n_centroids='', n_components=''):
@@ -95,7 +96,7 @@ def _fileNameSuffix(base, n_patches, patch_size, n_samples='', n_centroids='', n
     return base
 
 @profile
-def buildFeatureDictionary(images, n_patches=10, patch_size=(16, 16), n_centroids=100, save_pics=True):
+def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=100, save_pics=True):
     # set up the array and split images to patches
     X = np.zeros((n_patches * len(images), patch_size[0] * patch_size[1]))
     n_images = len(images)
@@ -172,7 +173,7 @@ def extractFeatures(patch, D, soft=True):
     return features
 
 
-def mapFeatures(image, D, patch_size=(16, 16), stride=1):
+def mapFeatures(image, D, patch_size=(8, 8), stride=1):
     n_features = len(D)
     p_x, p_y = patch_size
     x, y = image.shape
@@ -190,41 +191,33 @@ def mapFeatures(image, D, patch_size=(16, 16), stride=1):
     return features
 
 
-def pool(features, pool_size=(13, 13), type='max'):
+def pool(features, pool_split=2, type='max'):
     feat_x, feat_y, feat_z = features.shape
-    pool_x, pool_y = pool_size
-    pooled_y = feat_y / pool_y
-    pooled_x = feat_y / pool_y
-    # allocate the pooled features array
-    pooled_features = np.zeros((pooled_y, pooled_x, feat_z), dtype=np.float32)
-    # iterate over image and select subregions for pooling
-    for i in xrange(0, pooled_y):
-        for j in xrange(0, pooled_x):
-            # select pool_x x pool_y pooling region
-            pool_region = features[i * pool_y:i * pool_y + pool_y,
-                          j * pool_x:j * pool_x + pool_x, ...]
-            # max pooling
+    pooled_features = np.zeros((pool_split, pool_split, feat_z), dtype=np.float32)
+    # split the features array and pool features in the subarray
+    for i, x in enumerate(np.vsplit(features, pool_split)):
+        for j, y in enumerate(np.hsplit(x, pool_split)):
             if type == 'max':
-                pooled_features[i, j, ...] = np.max(pool_region, axis=(0, 1))
+                res = np.max(y, axis=(0, 1))
             # mean pooling
             if type == 'mean':
-                pooled_features[i, j, ...] = np.mean(pool_region, axis=(0, 1))
+                res = np.mean(y, axis=(0, 1))
+            pooled_features[i, j, ...] = res
     return pooled_features
 
 
 def featuresFromImages(images, D):
-    features = np.zeros((len(images), len(D)*3*3))
+    features = np.zeros((len(images), len(D)*4))
     for i, image in enumerate(images):
         features[i, ...] = pool(mapFeatures(image, D)).reshape((1, -1))
     return features
 
 if __name__ == '__main__':
     start_time = time.time()
-    images = readImages()
+    images, galaxies = readImages()
     _logWithTimestamp('Images read')
-    D = buildFeatureDictionary(images, n_centroids=3000, save_pics=False)
+    D = buildFeatureDictionary(images, n_centroids=1000, save_pics=False)
     _logWithTimestamp('Feature Dictionary ready')
-    #features = np.zeros((len(images), len(D)*12*12))
     pool = Pool()
     res = []
     def apply_callback(result):
@@ -236,6 +229,12 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
     features = np.vstack(tuple(res))
+
+    #features = featuresFromImages(images, D)
+    # resize the array to add galaxies id's in place
+    features.resize((features.shape[0], features.shape[1]+1), refcheck=False)
+    # append galaxy ids
+    features[:, 0] = np.array(galaxies)
     _logWithTimestamp('Features mapped to images')
-    np.savetxt('data/tidy/pooled_features_mp_all_3000c.csv', features, delimiter=',')
+    np.savetxt('data/tidy/pooled_features_test.csv', features, delimiter=',')
     _logWithTimestamp('Features saved, exiting')
