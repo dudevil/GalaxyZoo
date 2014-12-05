@@ -161,6 +161,8 @@ def loadPCAtransform(pca_file='data/models/pca_10.pkl'):
 
 
 def extractFeatures(patch, D, soft=True):
+    # normalize patch
+    patch = (patch - np.mean(patch, axis=1, keepdims=True)) / 255
     # compute Euclidian distance from patch to centroid
     z = np.sqrt(np.sum(np.square(D - patch.reshape(1, -1)), axis=1))
     if soft:
