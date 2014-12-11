@@ -162,7 +162,7 @@ def loadPCAtransform(pca_file='data/models/pca_10.pkl'):
 
 def extractFeatures(patch, D, soft=True):
     # normalize patch
-    patch = (patch - np.mean(patch, axis=1, keepdims=True)) / 255
+    patch = (patch - np.mean(patch, keepdims=True)) / 255
     # compute Euclidian distance from patch to centroid
     z = np.sqrt(np.sum(np.square(D - patch.reshape(1, -1)), axis=1))
     if soft:
@@ -193,7 +193,7 @@ def mapFeatures(image, D, patch_size=(8, 8), stride=1):
     return features
 
 
-def pool(features, pool_split=2, type='max'):
+def pool_features(features, pool_split=2, type='max'):
     feat_x, feat_y, feat_z = features.shape
     pooled_features = np.zeros((pool_split, pool_split, feat_z), dtype=np.float32)
     # split the features array and pool features in the subarray
@@ -208,35 +208,45 @@ def pool(features, pool_split=2, type='max'):
     return pooled_features
 
 
-def featuresFromImages(images, D):
-    features = np.zeros((len(images), len(D)*4))
+def featuresFromImages(images, D, names):
+    features = np.zeros((len(images), len(D)*4 + 1))
     for i, image in enumerate(images):
-        features[i, ...] = pool(mapFeatures(image, D)).reshape((1, -1))
+        features[i, ...] = np.append(names[i], pool_features(mapFeatures(image, D)).reshape((1, -1)))
     return features
 
 if __name__ == '__main__':
     start_time = time.time()
+
+    # images = [np.random.randint(low=0, high=255, size=25).reshape(5, 5), ]
+    # images[0] = images[0].astype('float32')
+    # D = np.array([np.random.randint(low=0, high=140, size=4),
+    #               np.random.randint(low=120, high=255, size=4),
+    #               np.random.randint(low=40, high=210, size=4)], dtype='float32')
+    # D /= 255
+    # features = featuresFromImages(images, D)
+
     images, galaxies = readImages()
     _logWithTimestamp('Images read')
     D = buildFeatureDictionary(images, n_centroids=1000, save_pics=False)
     _logWithTimestamp('Feature Dictionary ready')
     pool = Pool()
     res = []
+
     def apply_callback(result):
         res.append(result)
 
-    for chunk in np.array_split(images, cpu_count()):
-        _logWithTimestamp('Starting worker to chunk len %d' % len(chunk))
-        result = pool.apply_async(featuresFromImages, args=[chunk, D,], callback=apply_callback)
+    last_i = 0
+    for i, chunk in enumerate(np.array_split(images, cpu_count())):
+        n_img = len(chunk)
+        _logWithTimestamp('Starting worker to chunk len %d' % n_img)
+        result = pool.apply_async(featuresFromImages,
+                                  args=[chunk, D, galaxies[last_i:last_i+n_img]],
+                                  callback=apply_callback)
+        last_i += n_img
+
     pool.close()
     pool.join()
     features = np.vstack(tuple(res))
-
-    #features = featuresFromImages(images, D)
-    # resize the array to add galaxies id's in place
-    features.resize((features.shape[0], features.shape[1]+1), refcheck=False)
-    # append galaxy ids
-    features[:, 0] = np.array(galaxies)
     _logWithTimestamp('Features mapped to images')
-    np.savetxt('data/tidy/pooled_features_test.csv', features, delimiter=',')
+    np.savetxt('data/tidy/kmeans_features_1000c.csv', features, delimiter=',')
     _logWithTimestamp('Features saved, exiting')
