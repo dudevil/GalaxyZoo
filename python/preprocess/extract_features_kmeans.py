@@ -225,9 +225,10 @@ if __name__ == '__main__':
     # D /= 255
     # features = featuresFromImages(images, D)
 
-    images, galaxies = readImages()
+    images, galaxies = readImages(images_path='data/raw/images_test_rev1')
     _logWithTimestamp('Images read')
-    D = buildFeatureDictionary(images, n_centroids=1000, save_pics=False)
+    #D = buildFeatureDictionary(images, n_centroids=1000, save_pics=False)
+    D = np.genfromtxt('data/models/centroids_61578_1000.csv', delimiter=',')
     _logWithTimestamp('Feature Dictionary ready')
     pool = Pool()
     res = []
@@ -248,5 +249,5 @@ if __name__ == '__main__':
     pool.join()
     features = np.vstack(tuple(res))
     _logWithTimestamp('Features mapped to images')
-    np.savetxt('data/tidy/kmeans_features_1000c.csv', features, delimiter=',')
+    np.savetxt('data/tidy/kmeans_test_features_1000c.csv', features, delimiter=',')
     _logWithTimestamp('Features saved, exiting')
