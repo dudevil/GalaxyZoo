@@ -15,32 +15,47 @@ from utils import *
 
 np.random.seed(26081988)
 
-joined = mergeFeaturesResponses()
-test_features = pd.read_csv('data/features/kmeans_test_features_1000c.csv', header=None, index_col=0)
+joined = mergeFeaturesResponses('data/features/kmeans_features_1000c_20k.csv')
+#test_features = pd.read_csv('data/features/kmeans_test_features_1000c.csv', header=None, index_col=0)
 
 X = joined.iloc[:, :4000]
 Y = joined.iloc[:, 4000:]
 
-# train ridge regression
-logWithTimestamp('Fitting Ridge')
-ridge = Ridge(alpha=1.0)
-ridge.fit(X, Y)
-logWithTimestamp('Ridge fitted')
+n_alphas = 10
 
-# prepare ridge output for the random forest
-y_linear = ridge.predict(X)
-test_linear = ridge.predict(test_features)
+alphas = np.logspace(-5, -1, n_alphas)
 
-# train RandomForest regressor
-logWithTimestamp('Starting RF')
-rf = RandomForestRegressor(n_estimators=100, max_features='sqrt', n_jobs=-1)
-rf.fit(y_linear, Y)
-logWithTimestamp('RF fitted')
+kf = KFold(len(joined), n_folds=3)
 
-# get galaxy id's
-galaxies = test_features.index.values
-# append galaxy id's to prediction
-submit = np.append(galaxies.reshape(galaxies.shape[0], 1), rf.predict(test_linear), axis=1)
+results = np.zeros((n_alphas, 7), dtype='float64')
 
-saveSubmission(submit, 'data/submit/testsub.csv')
+for i, alpha in enumerate(alphas):
+    logWithTimestamp('Cross-validation with alpha %.10f' % alpha)
+    ridge = Ridge(alpha=alpha)
+    rf = RandomForestRegressor(n_estimators=100, max_features='sqrt', n_jobs=-1)
+    j = 1
+    results[i, 0] = alpha
+    for train, test in kf:
+        logWithTimestamp('\tCV loop #%d' % j)
+        ridge.fit(X.iloc[train], Y.iloc[train])
+        y_linear = ridge.predict(X.iloc[train])
+        y_test_linear = ridge.predict(X.iloc[test])
+        results[i, j] = np.sqrt(mean_squared_error(y_test_linear, Y.iloc[test]))
+        rf.fit(y_linear, Y.iloc[train])
+        results[i, j + 3] = np.sqrt(mean_squared_error(rf.predict(y_test_linear), Y.iloc[test]))
+        j += 1
+
+savetxt('data/tidy/cross_val_alpha.csv', results, delimiter=',', fmt='%.10f')
+
+#
+# # train RandomForest regressor
+# logWithTimestamp('Starting RF')
+# logWithTimestamp('RF fitted')
+#
+# # get galaxy id's
+# galaxies = test_features.index.values
+# # append galaxy id's to prediction
+# submit = np.append(galaxies.reshape(galaxies.shape[0], 1), rf.predict(test_linear), axis=1)
+#
+# saveSubmission(submit, 'data/submit/testsub.csv')
 logWithTimestamp('Exiting')
