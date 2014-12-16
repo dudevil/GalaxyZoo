@@ -25,22 +25,23 @@ n_alphas = 10
 
 alphas = np.logspace(-5, -1, n_alphas)
 n_trees = np.logspace(1, 3, 50, dtype='int')
-n_folds = 6
+n_samples = np.linspace(1, 1000, 40, dtype='int')
+n_folds = 5
 kf = KFold(len(joined), n_folds=n_folds)
 
 
-results = np.zeros((len(n_trees), n_folds+1), dtype='float32')
-alpha = 0.1
+results = np.zeros((len(n_samples), n_folds+1), dtype='float32')
+alpha = 10
 ridge = Ridge(alpha=alpha)
 logWithTimestamp('Training ridge with alpha %f' % alpha)
 ridge.fit(X, Y)
 ridge_predictions = ridge.predict(X)
 logWithTimestamp('Ridge regressor trained')
 
-for i, n_trees in enumerate(n_trees):
-    logWithTimestamp('Cross-validation with n_trees %d' % n_trees)
-    results[i, 0] = n_trees
-    rf = RandomForestRegressor(n_estimators=n_trees, max_features='sqrt', n_jobs=-1)
+for i, min_leaf in enumerate(n_samples):
+    logWithTimestamp('Cross-validation with min_samples_leaf %d' % min_leaf)
+    results[i, 0] = min_leaf
+    rf = RandomForestRegressor(n_estimators=686, max_features='sqrt', n_jobs=-1, min_samples_leaf=min_leaf)
     j = 1
     for train, test in kf:
         logWithTimestamp('\tCV loop #%d' % j)
@@ -49,7 +50,7 @@ for i, n_trees in enumerate(n_trees):
                                                     Y.iloc[test]))
         j += 1
 
-savetxt('data/tidy/cross_val_ntrees.csv', results, delimiter=',', fmt='%.10f')
+savetxt('data/tidy/cross_val_minleaf.csv', results, delimiter=',', fmt='%.10f')
 
 # results = np.zeros((n_alphas, 7), dtype='float64')
 # for i, alpha in enumerate(alphas):
