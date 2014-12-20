@@ -12,10 +12,11 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from sklearn.decomposition import RandomizedPCA
 from sklearn.feature_extraction.image import extract_patches_2d
+from sklearn.feature_selection import VarianceThreshold
 import sklearn.cluster as cluster
 from sklearn.externals import joblib
 from multiprocessing import Pool, cpu_count
-from memory_profiler import profile
+
 __author__ = 'dudevil'
 
 # The current working dir should be the project top-level directory
@@ -24,6 +25,7 @@ seed = 211114
 np.random.seed(seed)
 start_time = 0
 
+counts = 0
 
 def _logWithTimestamp(msg):
     print('[%d] %s' % (int(time.time()) - start_time, msg))
@@ -95,8 +97,9 @@ def _fileNameSuffix(base, n_patches, patch_size, n_samples='', n_centroids='', n
     base += '.png'
     return base
 
-@profile
-def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=100, save_pics=True):
+
+def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=100, cluster_threshold=5,
+                           save_pics=True):
     # set up the array and split images to patches
     X = np.zeros((n_patches * len(images), patch_size[0] * patch_size[1]))
     n_images = len(images)
@@ -134,8 +137,22 @@ def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=
 
     # ##KMEANS
     _logWithTimestamp("==== Starting K-Means====")
-    k_means = cluster.MiniBatchKMeans(n_clusters=n_centroids)
+    k_means = cluster.MiniBatchKMeans(n_clusters=n_centroids, reassignment_ratio=0.1)
     k_means.fit(X)
+
+    while k_means.counts_.min() < cluster_threshold:
+        small_mask = k_means.counts_ < cluster_threshold
+        _logWithTimestamp('\tNumber of small clusters: %d. Reinitializing...' % sum(small_mask))
+        good_centroids = k_means.cluster_centers_[np.logical_not(small_mask)]
+        small_centroids = np.random.normal(0.0,
+                                            scale=(np.abs(X.max()) + np.abs(X.min()))/2,
+                                            size=k_means.cluster_centers_[small_mask].shape)
+        new_clusters = np.vstack((good_centroids, small_centroids))
+        k_means = cluster.MiniBatchKMeans(n_clusters=n_centroids, init=new_clusters, reassignment_ratio=0.1)
+        k_means.fit(X)
+        counts = k_means.counts_
+
+
     _logWithTimestamp("==== K-Means fitted ====")
 
     # get centroids and transform them to original space
@@ -143,13 +160,13 @@ def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=
     if save_pics:
         # plot 100 random centroids
         plotImageGrid(D, image_size=patch_size)
-        plt.savefig(_fileNameSuffix('pictures/centroids', n_patches, patch_size,
+        plt.savefig(_fileNameSuffix('pictures/centroidsm45', n_patches, patch_size,
                                     n_images, n_centroids=n_centroids))
 
     # save the results of calculations for future use
     np.savetxt('data/models/centroids_%d_%d.csv' % (n_images, n_centroids), D, delimiter=',')
     joblib.dump(pca, 'data/models/pca_%d.pkl' % n_images)
-    return D
+    return (D, counts)
 
 
 def loadFeatureDict(dict_file='data/models/centroids_10.csv'):
@@ -209,10 +226,11 @@ def pool_features(features, pool_split=2, type='max'):
 
 
 def featuresFromImages(images, D, names):
-    features = np.zeros((len(images), len(D)*4 + 1))
+    features = np.zeros((len(images), len(D) * 4 + 1))
     for i, image in enumerate(images):
         features[i, ...] = np.append(names[i], pool_features(mapFeatures(image, D)).reshape((1, -1)))
     return features
+
 
 if __name__ == '__main__':
     start_time = time.time()
@@ -220,15 +238,15 @@ if __name__ == '__main__':
     # images = [np.random.randint(low=0, high=255, size=25).reshape(5, 5), ]
     # images[0] = images[0].astype('float32')
     # D = np.array([np.random.randint(low=0, high=140, size=4),
-    #               np.random.randint(low=120, high=255, size=4),
+    # np.random.randint(low=120, high=255, size=4),
     #               np.random.randint(low=40, high=210, size=4)], dtype='float32')
     # D /= 255
     # features = featuresFromImages(images, D)
 
-    images, galaxies = readImages(images_path='data/raw/images_test_rev1')
+    images, galaxies = readImages(images_path='data/raw/images_training_rev1', n_images=2000)
     _logWithTimestamp('Images read')
-    #D = buildFeatureDictionary(images, n_centroids=1000, save_pics=False)
-    D = np.genfromtxt('data/models/centroids_61578_1000.csv', delimiter=',')
+    D, counts = buildFeatureDictionary(images, n_centroids=100, save_pics=False, cluster_threshold=45)
+    #D = np.genfromtxt('data/models/centroids_61578_1000.csv', delimiter=',')
     _logWithTimestamp('Feature Dictionary ready')
     pool = Pool()
     res = []
@@ -241,13 +259,19 @@ if __name__ == '__main__':
         n_img = len(chunk)
         _logWithTimestamp('Starting worker to chunk len %d' % n_img)
         result = pool.apply_async(featuresFromImages,
-                                  args=[chunk, D, galaxies[last_i:last_i+n_img]],
+                                  args=[chunk, D, galaxies[last_i:last_i + n_img]],
                                   callback=apply_callback)
         last_i += n_img
 
     pool.close()
     pool.join()
     features = np.vstack(tuple(res))
+    n_zero = sum(features[:, 1:].std(axis=0) == 0)
+    from IPython.core.debugger import Tracer
+    Tracer()()
+    _logWithTimestamp('Zero varience features: %d' % n_zero)
     _logWithTimestamp('Features mapped to images')
-    np.savetxt('data/tidy/kmeans_test_features_1000c.csv', features, delimiter=',')
+    vsel = VarianceThreshold()
+    features = vsel.fit_transform(features)
+    np.savetxt('data/tidy/kmeans_features_3000c_45.csv', features, delimiter=',')
     _logWithTimestamp('Features saved, exiting')

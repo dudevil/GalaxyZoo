@@ -1,6 +1,6 @@
 __author__ = 'dudevil'
 
-from numpy import savetxt
+from numpy import savetxt, sqrt
 from pandas import read_csv
 import time
 
@@ -9,6 +9,9 @@ _start_time = time.time()
 def logWithTimestamp(msg):
     print('[%d] %s' % (int(time.time()-_start_time), msg))
 
+def rmse_scorer(estimator, X, y):
+    from sklearn.metrics import mean_squared_error
+    return sqrt(mean_squared_error(y, estimator.predict(X)))
 
 def saveSubmission(array, filename='data/submit/submission_%d.csv' % time.time()):
     """
