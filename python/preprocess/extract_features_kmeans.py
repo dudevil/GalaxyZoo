@@ -21,7 +21,7 @@ __author__ = 'dudevil'
 
 # The current working dir should be the project top-level directory
 
-seed = 211114
+seed = 211214
 np.random.seed(seed)
 start_time = 0
 
@@ -108,7 +108,7 @@ def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=
         X[i * n_patches:i * n_patches + n_patches, ...] = patches.reshape((n_patches, -1))
 
     # substract mean and rescale pixel values
-    X = (X - np.mean(X, axis=1, keepdims=True)) / 255
+    X = (X - np.mean(X, axis=0, keepdims=True)) / 255
 
     if save_pics:
         # get some random patches to plot
@@ -121,12 +121,16 @@ def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=
     _logWithTimestamp("==== Starting PCA ====")
     # perform whitening
     # 42 components = 99% explained varience
-    n_components = 42
-    pca = RandomizedPCA(n_components=n_components, whiten=True, random_state=seed)
-    X = pca.fit_transform(X)
-
-    _logWithTimestamp("variance explained: %f" % np.sum(pca.explained_variance_ratio_[:n_components]))
-    _logWithTimestamp("==== PCA fitted =====")
+    n_components = 15
+    #pca = RandomizedPCA(n_components=n_components, whiten=True, random_state=seed)
+    #X = pca.fit_transform(X)
+    test_patch = X[100]
+    from zca import ZCA
+    zca = ZCA()
+    zca.fit(X)
+    X = zca.transform(X)
+    _logWithTimestamp("variance explained: %f" % np.sum(zca.explained_variance_ratio_[:n_components]))
+    _logWithTimestamp("==== ZCA fitted =====")
 
     if save_pics:
         # plot whitened patches after inverse transform
@@ -137,7 +141,7 @@ def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=
 
     # ##KMEANS
     _logWithTimestamp("==== Starting K-Means====")
-    k_means = cluster.MiniBatchKMeans(n_clusters=n_centroids, reassignment_ratio=0.1)
+    k_means = cluster.MiniBatchKMeans(n_clusters=n_centroids, reassignment_ratio=1.)
     k_means.fit(X)
 
     while k_means.counts_.min() < cluster_threshold:
@@ -148,15 +152,17 @@ def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=
                                             scale=(np.abs(X.max()) + np.abs(X.min()))/2,
                                             size=k_means.cluster_centers_[small_mask].shape)
         new_clusters = np.vstack((good_centroids, small_centroids))
-        k_means = cluster.MiniBatchKMeans(n_clusters=n_centroids, init=new_clusters, reassignment_ratio=0.1)
+        k_means = cluster.MiniBatchKMeans(n_clusters=n_centroids, init=new_clusters, reassignment_ratio=1.)
         k_means.fit(X)
-        counts = k_means.counts_
+
+
+    _logWithTimestamp('Final cluster counts: \n%s' % k_means.counts_)
 
 
     _logWithTimestamp("==== K-Means fitted ====")
 
     # get centroids and transform them to original space
-    D = pca.inverse_transform(k_means.cluster_centers_)
+    D = zca.inverse_transform(k_means.cluster_centers_)
     if save_pics:
         # plot 100 random centroids
         plotImageGrid(D, image_size=patch_size)
@@ -165,8 +171,8 @@ def buildFeatureDictionary(images, n_patches=10, patch_size=(8, 8), n_centroids=
 
     # save the results of calculations for future use
     np.savetxt('data/models/centroids_%d_%d.csv' % (n_images, n_centroids), D, delimiter=',')
-    joblib.dump(pca, 'data/models/pca_%d.pkl' % n_images)
-    return (D, counts)
+    #joblib.dump(zca, 'data/models/pca_%d.pkl' % n_images)
+    return D
 
 
 def loadFeatureDict(dict_file='data/models/centroids_10.csv'):
@@ -243,9 +249,9 @@ if __name__ == '__main__':
     # D /= 255
     # features = featuresFromImages(images, D)
 
-    images, galaxies = readImages(images_path='data/raw/images_training_rev1', n_images=2000)
+    images, galaxies = readImages(images_path='data/raw/images_training_rev1')
     _logWithTimestamp('Images read')
-    D, counts = buildFeatureDictionary(images, n_centroids=100, save_pics=False, cluster_threshold=45)
+    D = buildFeatureDictionary(images, n_centroids=500, save_pics=False, cluster_threshold=45)
     #D = np.genfromtxt('data/models/centroids_61578_1000.csv', delimiter=',')
     _logWithTimestamp('Feature Dictionary ready')
     pool = Pool()
@@ -267,11 +273,9 @@ if __name__ == '__main__':
     pool.join()
     features = np.vstack(tuple(res))
     n_zero = sum(features[:, 1:].std(axis=0) == 0)
-    from IPython.core.debugger import Tracer
-    Tracer()()
     _logWithTimestamp('Zero varience features: %d' % n_zero)
     _logWithTimestamp('Features mapped to images')
     vsel = VarianceThreshold()
     features = vsel.fit_transform(features)
-    np.savetxt('data/tidy/kmeans_features_3000c_45.csv', features, delimiter=',')
+    np.savetxt('data/tidy/kmeans_features_500c_zca.csv', features, delimiter=',')
     _logWithTimestamp('Features saved, exiting')
